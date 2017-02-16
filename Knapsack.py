@@ -1,17 +1,81 @@
+#Branch and Bound code taken from:
+#http://codereview.stackexchange.com/questions/94428/python-knapsack-problem-using-branch-and-bound-algorithm?rq=1
+
+#Brutefroce code taken from:
+#http://rosettacode.org/wiki/Knapsack_problem/0-1#Python
+
 from itertools import combinations
 
-#items = (("map", 9, 150), ("compass", 13, 35), ("water", 153, 200), ("sandwich", 50, 160))
-items = (
-        ("map", 9, 150), ("compass", 13, 35), ("water", 153, 200), ("sandwich", 50, 160),
-        ("glucose", 15, 60), ("tin", 68, 45), ("banana", 27, 60), ("apple", 39, 40),
-        ("cheese", 23, 30), ("beer", 52, 10), ("suntan cream", 11, 70), ("camera", 32, 30),
-        ("t-shirt", 24, 15), ("trousers", 48, 10), ("umbrella", 73, 40),
-        ("waterproof trousers", 42, 70), ("waterproof overclothes", 43, 75),
-        ("note-case", 22, 80), ("sunglasses", 7, 20), ("towel", 18, 12),
-        ("socks", 4, 50), ("book", 30, 10),
-        )
+data_item = ['map', 'compass', 'water', 'sandwich', 'glucose', 'tin', 'banana',
+             'apple', 'cheese', 'beer', 'suntan', 'camera', 'T', 'trousers',
+             'umbrella', 'w t', 'w o', 'note-case', 'sunglasses', 'towel',
+             'socks', 'book']
+data_weight = [9, 13, 153, 50, 15, 68, 27, 39, 23, 52, 11, 32, 24, 48, 73, 42,
+               43, 22, 7, 18, 4, 30]
+data_value = [150, 35, 200, 160, 60, 45, 60, 40, 30, 10, 70, 30, 15, 10, 40,
+              70, 75, 80, 20, 12, 50, 10]
+data_sorted = sorted(zip(data_item, data_weight, data_value),
+                     key=lambda (i, w, v): v//w, reverse=True)
 
-capacity = 150
+max_weight = 400
+
+
+class State(object):
+    def __init__(self, level, benefit, weight, token):
+        # token = list marking if a task is token. ex. [1, 0, 0] means
+        # item0 token, item1 non-token, item2 non-token
+        # available = list marking all tasks available, i.e. not explored yet
+        self.level = level
+        self.benefit = benefit
+        self.weight = weight
+        self.token = token
+        self.available = self.token[:self.level]+[1]*(len(data_sorted)-level)
+        self.ub = self.upperbound()
+
+    def upperbound(self):  # define upperbound using fractional knaksack
+        upperbound = 0  # initial upperbound
+        # accumulated weight used to stop the upperbound summation
+        weight_accumulate = 0
+        for avail, (_, wei, val) in zip(self.available, data_sorted):
+            if wei * avail <= max_weight - weight_accumulate:
+                weight_accumulate += wei * avail
+                upperbound += val * avail
+            else:
+                upperbound += val * (max_weight - weight_accumulate) / wei * avail
+                break
+        return upperbound
+
+    def develop(self):
+        level = self.level + 1
+        _, weight, value = data_sorted[self.level]
+        left_weight = self.weight + weight
+        if left_weight <= max_weight:  # if not overweighted, give left child
+            left_benefit = self.benefit + value
+            left_token = self.token[:self.level]+[1]+self.token[level:]
+            left_child = State(level, left_benefit, left_weight, left_token)
+        else:
+            left_child = None
+        # anyway, give right child
+        right_child = State(level, self.benefit, self.weight, self.token)
+        return ([] if left_child is None else [left_child]) + [right_child]
+
+def branchBound():
+    Root = State(0, 0, 0, [0] * len(data_sorted))  # start with nothing
+    waiting_States = []  # list of States waiting to be explored
+    current_state = Root
+    while current_state.level < len(data_sorted):
+        waiting_States.extend(current_state.develop())
+        # sort the waiting list based on their upperbound
+        waiting_States.sort(key=lambda x: x.ub)
+        # explore the one with largest upperbound
+        current_state = waiting_States.pop()
+    best_item = [item for tok, (item, _, _)
+                 in zip(current_state.token, data_sorted) if tok == 1]
+    
+    print "Total weight: ", current_state.weight
+    print "Total Value: ", current_state.benefit
+    print "Items:", best_item
+
 
 def anycomb(items):
     ' return combinations of any length from the items '
@@ -26,74 +90,14 @@ def totalvalue(comb):
     for item, wt, val in comb:
         totwt  += wt
         totval += val
-    return (totval, -totwt) if totwt <= capacity else (0, 0)
+    return (totval, -totwt) if totwt <= max_weight else (0, 0)
 
-def valuePerWeight(index):
-    return items[index][2]/items[index][1]
-
-def greedyEval(depth, value, weightRemaining, itemTaken):    
-    if (itemTaken):
-        value += items[depth][2]
-        weightRemaining -= items[depth][1]
-    
-    for each in range(depth+1,len(items)):
-        if (items[each][1] < weightRemaining):
-
-            value += items[each][2]
-            weightRemaining -= items[each][1]
-    return value
-
-
-def branchBound():
-    decisionTree = [[0],[-1, greedyEval(0, 0, capacity, True), 0]]
-    decisionTree.append([0, greedyEval(0, 0, capacity, True), items[0][2]])
-    decisionTree.append([0, greedyEval(0, 0, capacity, False), 0])
-
-    currentDepth = 0
-    currentIndex = 1
-    currentValue = 0
-    capacityAvailable = capacity
-    solution = False
-    while (solution != True):
-        #print currentDepth
-        leftChild = 2 * currentIndex
-        rightChild = (2 * currentIndex) + 1
-
-        if (len(decisionTree)-3 < leftChild):
-            while (len(decisionTree) < rightChild):
-                decisionTree.append(0)
-            decisionTree.insert(leftChild, [0, greedyEval(currentDepth, currentValue, capacityAvailable, True), items[currentDepth][2]])
-            decisionTree.insert(rightChild, [0, greedyEval(currentDepth, currentValue, capacityAvailable, False), 0])
-
-        #print "LeftChild = " + str(decisionTree[leftChild][1]) + " RightChild = " + str(decisionTree[rightChild][1])
-        if ((decisionTree[leftChild][1] > decisionTree[rightChild][1]) & (capacityAvailable > items[currentDepth][1])):
-            #print "Left"
-            currentIndex = leftChild
-            decisionTree[currentIndex][0]
-            currentValue += decisionTree[currentIndex][2]
-            capacityAvailable -= items[currentDepth][1]
-        else:
-            #print "Right"
-            currentIndex = rightChild
-            decisionTree[currentIndex][0]
-            
-        currentDepth += 1
-        if (currentDepth > len(items)-1):
-            print "Reached bottom of tree."
-            solution = True
-        
-    print "Total Value is: " + str(currentValue)
-        
 def bruteForce():
-    bagged = max( anycomb(items), key=totalvalue) # max val or min wt if values equal
+    bagged = max( anycomb(data_sorted), key=totalvalue) # max val or min wt if values equal
     print("Bagged the following items\n  " +
-          '\n  '.join(sorted(item for item,_,_ in bagged)))
+          ', '.join(sorted(item for item,_,_ in bagged)))
     val, wt = totalvalue(bagged)
     print("for a total value of %i and a total weight of %i" % (val, -wt))
-        
-                        
-    
-    
-branchBound()
-bruteForce()
 
+bruteForce()
+branchBound()
