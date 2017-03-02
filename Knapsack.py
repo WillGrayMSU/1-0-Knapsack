@@ -5,6 +5,7 @@
 #http://rosettacode.org/wiki/Knapsack_problem/0-1#Python
 
 from itertools import combinations
+import time
 
 data_item = ['map', 'compass', 'water', 'sandwich', 'glucose', 'tin', 'banana',
              'apple', 'cheese', 'beer', 'suntan', 'camera', 'T', 'trousers',
@@ -99,5 +100,13 @@ def bruteForce():
     val, wt = totalvalue(bagged)
     print("for a total value of %i and a total weight of %i" % (val, -wt))
 
-bruteForce()
+
+print len(data_sorted)
+start = time.time()
 branchBound()
+end = time.time()
+print "Branch and Bound took " + str(end - start) + " secs."
+start = time.time()
+bruteForce()
+end = time.time()
+print "Brute Force took " + str(end - start) + " secs."
